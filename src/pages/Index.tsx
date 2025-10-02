@@ -49,7 +49,7 @@ const Index = () => {
   const [maxRarity, setMaxRarity] = useState("5");
   const [brandMode, setBrandMode] = useState(false);
   const [maxResults, setMaxResults] = useState("50");
-  const [results, setResults] = useState<WordResult[]>([]);
+  const [results, setResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
   const toggleField = (field: string) => {
@@ -65,47 +65,44 @@ const Index = () => {
     }
 
     setIsSearching(true);
+    setResults([]);
     toast.info("Extracting rare words...");
 
-    // Simulate word extraction with realistic data
-    setTimeout(() => {
-      const mockResults = generateMockResults(parseInt(maxResults) || 50);
-      setResults(mockResults);
-      setIsSearching(false);
-      toast.success(`Found ${mockResults.length} rare words!`);
-    }, 1500);
-  };
+    try {
+      const criteria = {
+        fields: selectedFields,
+        lengthRange: [parseInt(minLength) || 3, parseInt(maxLength) || 15] as [number, number],
+        firstLetter: firstLetter || undefined,
+        posType: posType === "any" ? undefined : posType,
+        rarityRange: [parseInt(minRarity) || 1, parseInt(maxRarity) || 5] as [number, number],
+        brandMode,
+        maxResults: parseInt(maxResults) || 50,
+      };
 
-  const generateMockResults = (count: number): WordResult[] => {
-    const samples = [
-      "zenith", "flux", "nexus", "ember", "quasar", "aegis", "cipher", "prism",
-      "vortex", "axiom", "epoch", "lucid", "nova", "pulse", "vertex", "zephyr",
-      "quantum", "matrix", "phoenix", "stellar", "cascade", "lumina", "echo",
-      "horizon", "synapse", "cortex", "Vector", "zenon", "apex", "helix"
-    ];
-    
-    const min = parseInt(minLength) || 3;
-    const max = parseInt(maxLength) || 15;
-    
-    return samples
-      .filter(w => {
-        const len = w.length;
-        const matchesLength = len >= min && len <= max;
-        const matchesFirstLetter = !firstLetter || w.toLowerCase().startsWith(firstLetter.toLowerCase());
-        return matchesLength && matchesFirstLetter;
-      })
-      .slice(0, count)
-      .map(word => ({
-        word,
-        score: Math.random() * 4 + 6,
-        brand: Math.random() * 3 + 7,
-        rarity: Math.random() * 2 + 3,
-        sentiment: Math.random() * 0.8 + 0.2,
-        domainAvailable: Math.random() > 0.5,
-        domainScore: Math.random() * 0.6 + 0.4,
-        length: word.length,
-      }))
-      .sort((a, b) => b.score - a.score);
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-words`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(criteria),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setResults(data);
+      toast.success(`Found ${data.length} rare words!`);
+    } catch (error) {
+      console.error("Error extracting words:", error);
+      toast.error("Failed to extract words. Please try again.");
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   const exportResults = () => {
@@ -321,37 +318,37 @@ const Index = () => {
                     key={idx}
                     className="p-4 bg-gradient-to-r from-card to-secondary/30 rounded-lg border border-border/50 hover:border-primary/30 transition-colors"
                   >
-                    <div className="flex items-start justify-between mb-2">
+                     <div className="flex items-start justify-between mb-2">
                       <div className="flex items-center gap-3">
                         <span className="text-2xl font-bold text-primary">
                           {result.word}
                         </span>
-                        {result.domainAvailable && (
+                        {result.meta?.domain_available && (
                           <Badge variant="outline" className="bg-success/10 text-success border-success/20">
                             .com available
                           </Badge>
                         )}
                       </div>
                       <Badge variant="secondary" className="font-mono">
-                        Score: {result.score.toFixed(1)}
+                        Score: {((result.meta?.brand || 0) * 0.35 + (result.meta?.rarity || 0) * 2 * 0.20).toFixed(1)}
                       </Badge>
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
                       <div>
                         <span className="text-muted-foreground">Brand:</span>{" "}
-                        <span className="font-semibold">{result.brand.toFixed(1)}</span>
+                        <span className="font-semibold">{(result.meta?.brand || 0).toFixed(1)}</span>
                       </div>
                       <div>
                         <span className="text-muted-foreground">Rarity:</span>{" "}
-                        <span className="font-semibold">{result.rarity.toFixed(1)}</span>
+                        <span className="font-semibold">{(result.meta?.rarity || 0).toFixed(1)}</span>
                       </div>
                       <div>
                         <span className="text-muted-foreground">Sentiment:</span>{" "}
-                        <span className="font-semibold">{result.sentiment.toFixed(2)}</span>
+                        <span className="font-semibold">{(result.meta?.sentiment || 0).toFixed(2)}</span>
                       </div>
                       <div>
                         <span className="text-muted-foreground">Domain:</span>{" "}
-                        <span className="font-semibold">{(result.domainScore * 100).toFixed(0)}%</span>
+                        <span className="font-semibold">{((result.meta?.domain_score || 0) * 100).toFixed(0)}%</span>
                       </div>
                     </div>
                   </div>
